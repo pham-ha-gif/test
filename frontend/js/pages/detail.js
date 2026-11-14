@@ -1,5 +1,5 @@
-import { deletePrediction, getPrediction, ApiError } from '../api.js';
-import { isLoggedIn, requireLogin } from '../auth.js';
+import { deletePrediction, getPrediction, rerunPrediction, savePrediction, ApiError } from '../api.js';
+import { isLoggedIn, requireLogin, expireSession } from '../auth.js';
 import { confirmAction, toast } from '../ui.js';
 import { intervalText, predictionDisclaimer } from '../prediction-summary.js';
 import { propertyFacts } from '../property.js';
@@ -13,6 +13,7 @@ if (!isLoggedIn()) requireLogin();
 const id = new URLSearchParams(location.search).get('id');
 const detail = document.getElementById('detail');
 let loaded = null;
+let rerunResult = null;
 const price = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 });
 
 function addFact(container, label, value) {
@@ -42,6 +43,7 @@ async function load() {
     detail.hidden = false;
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) location.href = '404.html';
+    else if (error.status === 401) { expireSession(); requireLogin(); }
     else toast(error.detail ?? 'Không thể tải dự đoán.', 'error');
   }
 }
@@ -51,6 +53,50 @@ document.getElementById('export-prediction').addEventListener('click', () => {
   if (!loaded) return;
   exportPredictions([loaded], `homeval-du-doan-${String(loaded.id).replace(/[^\w-]/g, '')}.csv`);
   toast('Đã xuất dự đoán ra CSV.');
+});
+
+const rerunButton = document.getElementById('rerun-prediction');
+const rerunPanel = document.getElementById('rerun-comparison');
+const saveRerunButton = document.getElementById('save-rerun');
+
+rerunButton.addEventListener('click', async () => {
+  if (!loaded || rerunButton.disabled) return;
+  rerunButton.disabled = true;
+  rerunButton.textContent = 'Đang chạy lại…';
+  try {
+    rerunResult = await rerunPrediction(id);
+    const comparison = rerunResult.comparison;
+    const change = comparison.change_vnd;
+    const sign = change > 0 ? '+' : '';
+    document.getElementById('rerun-price-comparison').textContent =
+      `Cũ: ${price.format(comparison.previous_estimated_price)} · Mới: ${price.format(rerunResult.estimated_price)} · Thay đổi: ${sign}${price.format(change)} (${sign}${comparison.change_percent}%).`;
+    document.getElementById('rerun-model-version').textContent =
+      `Mô hình hiện tại: ${rerunResult.model.version}. Kết quả mới chưa được lưu vào lịch sử.`;
+    rerunPanel.hidden = false;
+    saveRerunButton.hidden = false;
+    saveRerunButton.disabled = false;
+    saveRerunButton.textContent = 'Lưu kết quả chạy lại';
+  } catch (error) {
+    if (error.status === 401) { expireSession(); requireLogin(); return; }
+    toast(error.detail ?? 'Không thể chạy lại dự đoán.', 'error');
+  } finally {
+    rerunButton.disabled = false;
+    rerunButton.textContent = 'Chạy lại với mô hình hiện tại';
+  }
+});
+
+saveRerunButton.addEventListener('click', async () => {
+  if (!rerunResult || !loaded || saveRerunButton.disabled) return;
+  saveRerunButton.disabled = true;
+  try {
+    await savePrediction(rerunResult, `${loaded.label || loaded.property_type} · chạy lại`);
+    saveRerunButton.textContent = 'Đã lưu vào lịch sử';
+    toast('Đã lưu kết quả chạy lại.');
+  } catch (error) {
+    if (error.status === 401) { expireSession(); requireLogin(); return; }
+    saveRerunButton.disabled = false;
+    toast(error.detail ?? 'Không thể lưu kết quả chạy lại.', 'error');
+  }
 });
 
 document.getElementById('delete-prediction').addEventListener('click', async () => {
@@ -65,6 +111,7 @@ document.getElementById('delete-prediction').addEventListener('click', async () 
     toast('Đã xóa dự đoán.');
     location.href = 'predictions.html';
   } catch (error) {
+    if (error.status === 401) { expireSession(); requireLogin(); return; }
     toast(error.detail ?? 'Không thể xóa dự đoán.', 'error');
   }
 });

@@ -91,34 +91,6 @@ passwordForm.addEventListener('submit', async e => {
       current_password: passwordForm.current_password.value,
       new_password: passwordForm.new_password.value,
     });
-
-    deleteForm.addEventListener('submit', async event => {
-      event.preventDefault();
-      clearFieldErrors(deleteForm);
-      if (deleteForm.confirmation.value.trim() !== 'DELETE') {
-        setFieldError(deleteForm.confirmation, 'Hãy nhập chính xác DELETE để tiếp tục.');
-        return;
-      }
-      const approved = await confirmAction({
-        title: 'Xóa tài khoản và dữ liệu?',
-        message: 'Tài khoản cùng toàn bộ dự đoán đã lưu và dữ liệu liên quan sẽ bị xóa vĩnh viễn.',
-        confirmText: 'Xóa tài khoản',
-      });
-      if (!approved) return;
-
-      const button = deleteForm.querySelector('button[type=submit]');
-      button.disabled = true;
-      try {
-        await deleteAccount('DELETE');
-        clearSession();
-        toast('Tài khoản và dữ liệu đã được xóa.');
-        location.href = 'index.html';
-      } catch (error) {
-        if (error.status === 401) { expireSession(); requireLogin(); return; }
-        button.disabled = false;
-        toast(error.detail ?? 'Không thể xóa tài khoản.', 'error');
-      }
-    });
     toast('Đã đổi mật khẩu. Vui lòng đăng nhập lại lần sau bằng mật khẩu mới.');
     passwordForm.reset();
   } catch (err) {
@@ -129,5 +101,33 @@ passwordForm.addEventListener('submit', async e => {
       toast(err.detail ?? 'Không đổi được mật khẩu.', 'error');
   } finally {
     btn.disabled = false;
+  }
+});
+
+deleteForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  clearFieldErrors(deleteForm);
+  if (deleteForm.confirmation.value.trim() !== 'DELETE') {
+    setFieldError(deleteForm.confirmation, 'Hãy nhập chính xác DELETE để tiếp tục.');
+    return;
+  }
+  const approved = await confirmAction({
+    title: 'Xóa tài khoản và dữ liệu?',
+    message: 'Tài khoản cùng toàn bộ dự đoán đã lưu và dữ liệu liên quan sẽ bị xóa vĩnh viễn.',
+    confirmText: 'Xóa tài khoản',
+  });
+  if (!approved) return;
+
+  const button = deleteForm.querySelector('button[type=submit]');
+  button.disabled = true;
+  try {
+    await deleteAccount('DELETE');
+    clearSession();
+    toast('Tài khoản và dữ liệu đã được xóa.');
+    location.href = 'index.html';
+  } catch (error) {
+    if (error.status === 401) { expireSession(); requireLogin(); return; }
+    button.disabled = false;
+    toast(error.detail ?? 'Không thể xóa tài khoản.', 'error');
   }
 });

@@ -95,6 +95,27 @@ try {
     if (name === 'about-model') await page.locator('#dataset-title').waitFor();
     await layout(name);
   }
+  const deleteContext = await browser.newContext();
+  try {
+    const deletePage = await deleteContext.newPage();
+    deletePage.on('pageerror', error => errors.push(error.message));
+    await deletePage.goto(`${base}/login.html?demo=1`);
+    await deletePage.locator('[name=email]').fill('anh@example.com');
+    await deletePage.locator('[name=password]').fill('password123');
+    await deletePage.locator('button[type=submit]').click();
+    await deletePage.waitForURL('**/index.html');
+    await deletePage.goto(`${base}/profile.html`);
+    await deletePage.locator('#delete-confirmation').fill('DELETE');
+    await deletePage.locator('#delete-account-form button[type=submit]').click();
+    await deletePage.locator('#confirm-dialog[open]').waitFor();
+    await deletePage.locator('[data-confirm]').click();
+    await deletePage.waitForURL('**/index.html');
+    assert.equal(await deletePage.evaluate(() => localStorage.getItem('app_token')), null);
+    assert.equal(await deletePage.evaluate(() => localStorage.getItem('app_user')), null);
+    results.push('Account deletion works without changing the password and clears the session');
+  } finally {
+    await deleteContext.close();
+  }
   await page.goto(base + '/index.html');
   await page.locator('[data-action=logout]').click();
   await page.waitForURL('**/index.html');
